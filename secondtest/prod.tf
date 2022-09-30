@@ -15,6 +15,22 @@ resource "aws_s3_bucket_acl" "example_bucket_acl" {
 resource "aws_default_vpc" "default" {
 }
 
+resource "aws_default_subnet" "default_az1" {
+  availability_zone = "us-east-1a"
+
+  tags = {
+    "Terraform" : "true"
+  }
+}
+
+resource "aws_default_subnet" "default_az2" {
+  availability_zone = "us-east-1b"
+
+  tags = {
+    "Terraform" : "true"
+  }
+}
+
 resource "aws_security_group" "prod_web" {
   name        = "prod_web"
   description = "allow standard http/https inbound and everything outbound"
@@ -44,6 +60,7 @@ resource "aws_security_group" "prod_web" {
 }
 
 resource "aws_instance" "prod_web" {
+  count         = 2
   ami           = "ami-003a61536c01a7373"
   instance_type = "t2.nano"
 
@@ -56,8 +73,30 @@ resource "aws_instance" "prod_web" {
   }
 }
 
+resource "aws_eip_association" "prod_web" {
+  instance_id   = aws_instance.prod_web.0.id # assign IP to a given IP
+  #  instance_id   = aws_instance.prod_web.id
+  allocation_id = aws_eip.prod_web.id
+}
+
 resource "aws_eip" "prod_web" {
-  instance = aws_instance.prod_web.id
+  tags = {
+    "Terraform" : "true"
+  }
+}
+
+resource "aws_elb" "prod_web" {
+  name            = "prod-web"
+  instances       = aws_instance.prod_web.*.id
+  subnets         = [aws_default_subnet.default_az1.id, aws_default_subnet.default_az2.id]
+  security_groups = [aws_security_group.prod_web.id]
+
+  listener {
+    instance_port     = 80
+    instance_protocol = "http"
+    lb_port           = 80
+    lb_protocol       = "http"
+  }
 
   tags = {
     "Terraform" : "true"
